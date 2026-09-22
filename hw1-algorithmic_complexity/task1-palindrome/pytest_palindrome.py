@@ -7,6 +7,7 @@ testdata_simple = [
     (666, True),
     (666666, True),
     (int('6' * 1000), True),
+    (int('9' * 1500), True),
     (123333, False),
     (665666, False),
 ]
