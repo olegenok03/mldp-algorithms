@@ -16,6 +16,17 @@ class UDL:
             for val in iterable:
                 self.append_right(val)
 
+    @classmethod
+    def from_head_list_node(cls, head: ListNode | None) -> 'UDL':
+        new_list = UDL()
+        new_list._head = cur_node = head
+        new_list._len = 0
+        while cur_node:
+            new_list._len += 1
+            new_list._tail = cur_node
+            cur_node = cur_node.next
+        return new_list
+
     def __copy__(self) -> 'UDL':
         new_list = UDL()
         if self._head is None or self._tail is None:
