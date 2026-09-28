@@ -2,6 +2,10 @@ import pytest
 from primes_counter import primes_counter
 
 testdata_simple = [
+    (-10, 0),
+    (0, 0),
+    (1, 0),
+    (2, 0),
     (10, 4),
     (175, 40),
     (3500, 489),

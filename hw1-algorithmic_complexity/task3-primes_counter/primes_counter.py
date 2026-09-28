@@ -1,4 +1,6 @@
 def primes_counter(max_num: int) -> int:
+    if max_num <= 2:
+        return 0
     is_prime = [True] * max_num
     is_prime[0], is_prime[1] = False, False
 
