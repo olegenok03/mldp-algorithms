@@ -6,7 +6,10 @@ parent = os.path.dirname(current)
 sys.path.append(parent)
 
 import pytest
-from balanced_binary_tree import is_balanced
+from balanced_binary_tree import (
+    is_balanced_iterative,
+    is_balanced_recursive,
+)
 from binary_search_tree import BinarySearchTree, TreeNode
 
 # Набор сбалансированных деревьев (построение через preorder ключи BST)
@@ -42,25 +45,29 @@ testdata_unbalanced_preorder = [
 ]
 
 
+@pytest.mark.parametrize('func', [is_balanced_recursive, is_balanced_iterative])
 @pytest.mark.parametrize('keys', testdata_balanced_preorder)
-def test_balanced_trees(keys: list[int]) -> None:
+def test_balanced_trees(func, keys: list[int]) -> None:
     tree = BinarySearchTree.build_from_preorder_keys(keys)
-    assert is_balanced(tree) is True
+    assert func(tree) is True
 
 
+@pytest.mark.parametrize('func', [is_balanced_recursive, is_balanced_iterative])
 @pytest.mark.parametrize('keys', testdata_unbalanced_preorder)
-def test_unbalanced_trees(keys: list[int]) -> None:
+def test_unbalanced_trees(func, keys: list[int]) -> None:
     tree = BinarySearchTree.build_from_preorder_keys(keys)
-    assert is_balanced(tree) is False
+    assert func(tree) is False
 
 
-def test_empty_tree() -> None:
+@pytest.mark.parametrize('func', [is_balanced_recursive, is_balanced_iterative])
+def test_empty_tree(func) -> None:
     # Единственный краевой случай: пустое дерево
     empty_tree = BinarySearchTree()
-    assert is_balanced(empty_tree) is True
+    assert func(empty_tree) is True
 
 
-def test_arbitrary_binary_trees_not_bst() -> None:
+@pytest.mark.parametrize('func', [is_balanced_recursive, is_balanced_iterative])
+def test_arbitrary_binary_trees_not_bst(func) -> None:
     # Пример 1: Сбалансированное дерево с дубликатами
     #        1
     #       / \
@@ -72,7 +79,7 @@ def test_arbitrary_binary_trees_not_bst() -> None:
     root1.right = TreeNode(2)
     root1.left.left = TreeNode(3)
     root1.left.right = TreeNode(3)
-    assert is_balanced(BinarySearchTree(root1)) is True
+    assert func(BinarySearchTree(root1)) is True
 
     # Пример 2: Несбалансированное дерево
     #         1
@@ -89,10 +96,11 @@ def test_arbitrary_binary_trees_not_bst() -> None:
     root2.left.right = TreeNode(3)
     root2.left.left.left = TreeNode(4)
     root2.left.left.right = TreeNode(4)
-    assert is_balanced(BinarySearchTree(root2)) is False
+    assert func(BinarySearchTree(root2)) is False
 
 
-def test_subtrees_imbalance() -> None:
+@pytest.mark.parametrize('func', [is_balanced_recursive, is_balanced_iterative])
+def test_subtrees_imbalance(func) -> None:
     # Случай: корень имеет разницу высот <= 1, но в глубине поддерева есть дисбаланс:
     #             1
     #           /   \
@@ -115,4 +123,48 @@ def test_subtrees_imbalance() -> None:
     root.right.right = TreeNode(6)
     root.right.right.right = TreeNode(8)
 
-    assert is_balanced(BinarySearchTree(root)) is False
+    assert func(BinarySearchTree(root)) is False
+
+
+def test_large_balanced_tree() -> None:
+    """
+    Большое сбалансированное дерево (например, 10^4 узлов),
+    построенное из отсортированного массива делением пополам.
+    Высота дерева составляет ceil(log2(10000)) = 14, поэтому оба метода
+    (итеративный и рекурсивный) должны успешно подтвердить баланс.
+    """
+
+    def build_balanced_bst_from_sorted(arr: list[int]) -> TreeNode | None:
+        if not arr:
+            return None
+        mid = len(arr) // 2
+        root = TreeNode(arr[mid])
+        root.left = build_balanced_bst_from_sorted(arr[:mid])
+        root.right = build_balanced_bst_from_sorted(arr[mid + 1 :])
+        return root
+
+    n = 10_000
+    sorted_keys = list(range(n))
+    root = build_balanced_bst_from_sorted(sorted_keys)
+    tree = BinarySearchTree(root)
+
+    assert is_balanced_recursive(tree) is True
+    assert is_balanced_iterative(tree) is True
+
+
+def test_large_skewed_tree_handles_recursion_limit() -> None:
+    """
+    Тест на глубокое вырожденное дерево ('бамбук' из 5000 узлов):
+    - Рекурсивный вариант падает с RecursionError (лимит стека Python ~1000).
+    - Итеративный вариант успешно завершается и возвращает False.
+    """
+    n = 5_000
+    keys = list(range(n))  # Вырожденное вправо дерево: 0 -> 1 -> 2 -> ... -> 4999
+    tree = BinarySearchTree.build_from_preorder_keys(keys)
+
+    # Рекурсивный метод бросает RecursionError
+    with pytest.raises(RecursionError):
+        is_balanced_recursive(tree)
+
+    # Итеративный метод справляется без ошибок и возвращает False
+    assert is_balanced_iterative(tree) is False

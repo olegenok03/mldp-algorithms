@@ -40,12 +40,17 @@ class BinarySearchTree:
     @classmethod
     def build_from_preorder_keys(cls, keys: list[int]) -> 'BinarySearchTree':
         if not keys:
-            return BinarySearchTree()
+            return cls()
 
         root = TreeNode(keys[0])
         tree_stack = [root]
+        seen = {keys[0]}
 
         for key in keys[1:]:
+            if key in seen:
+                continue
+            seen.add(key)
+
             if key < tree_stack[-1].key:
                 node = TreeNode(key)
                 tree_stack[-1].left = node
@@ -57,7 +62,7 @@ class BinarySearchTree:
                 node = TreeNode(key)
                 last.right = node
                 tree_stack.append(node)
-        return BinarySearchTree(root)
+        return cls(root)
 
     def get_preorder(self) -> list[int]:
         res = []
@@ -72,6 +77,22 @@ class BinarySearchTree:
             else:
                 curr = tree_stack.pop()
                 curr = curr.right
+
+        return res
+
+    def get_reverse_preorder(self) -> list[int]:
+        res = []
+        tree_stack = []
+        curr = self.root
+
+        while curr is not None or tree_stack:
+            if curr is not None:
+                res.append(curr.key)
+                tree_stack.append(curr)
+                curr = curr.right
+            else:
+                curr = tree_stack.pop()
+                curr = curr.left
 
         return res
 
@@ -91,6 +112,22 @@ class BinarySearchTree:
 
         return res
 
+    def get_reverse_inorder(self) -> list[int]:
+        res = []
+        tree_stack = []
+        curr = self.root
+
+        while curr is not None or tree_stack:
+            if curr is not None:
+                tree_stack.append(curr)
+                curr = curr.right
+            else:
+                curr = tree_stack.pop()
+                res.append(curr.key)
+                curr = curr.left
+
+        return res
+
     def get_postorder(self) -> list[int]:
         res = []
         tree_stack = []
@@ -105,6 +142,26 @@ class BinarySearchTree:
                 peek_node = tree_stack[-1]
                 if peek_node.right is not None and last_visited != peek_node.right:
                     curr = peek_node.right
+                else:
+                    res.append(peek_node.key)
+                    last_visited = tree_stack.pop()
+
+        return res
+
+    def get_reverse_postorder(self) -> list[int]:
+        res = []
+        tree_stack = []
+        curr = self.root
+        last_visited = None
+
+        while curr is not None or tree_stack:
+            if curr is not None:
+                tree_stack.append(curr)
+                curr = curr.right
+            else:
+                peek_node = tree_stack[-1]
+                if peek_node.left is not None and last_visited != peek_node.left:
+                    curr = peek_node.left
                 else:
                     res.append(peek_node.key)
                     last_visited = tree_stack.pop()
