@@ -91,3 +91,32 @@ def test_quick_sort_iterative_identical_elements() -> None:
     data = [42] * 1500
     assert quick_sort_iterative(data) == data
 
+
+# =====================================================================
+# 3. Специальные и нетривиальные случаи
+# =====================================================================
+
+@pytest.mark.parametrize('n', [3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65])
+def test_powers_of_two_boundaries(n: int) -> None:
+    # Критично для Bottom-Up слияния: проверка границ вокруг степеней двойки
+    data = list(range(n, 0, -1))
+    expected = list(range(1, n + 1))
+    assert merge_sort_iterative(data) == expected
+    assert quick_sort_iterative(data) == expected
+
+
+@pytest.mark.parametrize(
+    'zigzag',
+    [
+        [1, 100, 2, 99, 3, 98, 4, 97, 5, 96],
+        [10, 1, 9, 2, 8, 3, 7, 4, 6, 5],
+        [5, 1, 5, 2, 5, 3, 5, 4],
+    ],
+)
+def test_zigzag_sawtooth_arrays(zigzag: list[int]) -> None:
+    # Пилообразные (зигзагообразные) массивы с частой сменой локальных экстремумов
+    expected = sorted(zigzag)
+    assert merge_sort_iterative(zigzag) == expected
+    assert quick_sort_iterative(zigzag) == expected
+
+
