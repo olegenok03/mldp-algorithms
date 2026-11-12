@@ -172,3 +172,70 @@ def test_kwargs_formatting(capsys: pytest.CaptureFixture[str]) -> None:
         in captured.out
     )
     assert '"greet" terminated. Returned value: ANTIGRAVITY (of type <class \'str\'>).' in captured.out
+
+
+def test_base_exception_indent_rollback(capsys: pytest.CaptureFixture[str]) -> None:
+    @tracer
+    def f(n: int) -> None:
+        if n == 0:
+            raise KeyboardInterrupt('Stop')
+        f(n - 1)
+
+    @tracer
+    def g() -> None:
+        try:
+            f(2)
+        except KeyboardInterrupt:
+            print('caught in g')
+
+    g()
+    captured = capsys.readouterr()
+    assert '    caught in g' in captured.out
+    assert '"g" terminated.' in captured.out
+    assert '"f" raised KeyboardInterrupt: Stop' in captured.err
+    assert not isinstance(sys.stdout, IndentedStream)
+    assert not isinstance(sys.stderr, IndentedStream)
+
+
+def test_empty_tab_preserves_parent_indent(capsys: pytest.CaptureFixture[str]) -> None:
+    @tracer(tab='    ')
+    def outer() -> None:
+        inner()
+
+    @tracer(tab='')
+    def inner() -> None:
+        deep()
+
+    @tracer(tab='    ')
+    def deep() -> None:
+        print('deep message')
+
+    outer()
+    captured = capsys.readouterr()
+    assert '"outer" call with args () and kwargs {}.' in captured.out
+    assert '    "inner" call with args () and kwargs {}.' in captured.out
+    assert '    "deep" call with args () and kwargs {}.' in captured.out
+    assert '        deep message' in captured.out
+    assert '    "deep" terminated.' in captured.out
+    assert '    "inner" terminated.' in captured.out
+    assert '"outer" terminated.' in captured.out
+
+
+def test_partial_line_print_before_subcall(capsys: pytest.CaptureFixture[str]) -> None:
+    @tracer
+    def caller() -> None:
+        print('partial text...', end='')
+        callee()
+
+    @tracer
+    def callee() -> None:
+        print('inside callee')
+
+    caller()
+    captured = capsys.readouterr()
+    lines = [line for line in captured.out.splitlines() if line.strip()]
+    assert '    partial text...' in lines
+    assert '    "callee" call with args () and kwargs {}.' in lines
+    assert '        inside callee' in lines
+    assert '    "callee" terminated.' in lines
+    assert '"caller" terminated.' in lines

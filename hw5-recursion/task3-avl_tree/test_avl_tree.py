@@ -210,16 +210,118 @@ def test_delete_all_nodes_until_empty() -> None:
     assert tree.inorder() == []
 
 
-def test_delete_triggering_rotations() -> None:
-    # Удаление, вызывающее дисбаланс и ребалансировку
+def test_init_with_root_validation() -> None:
+    # 1. Корректный корень принимается
+    valid_root = AVLNode(10)
+    valid_root.left = AVLNode(5)
+    valid_root.right = AVLNode(15)
+    valid_root.height = 2
+    tree = AVL(valid_root)
+    assert tree.root is not None and tree.root.key == 10
+
+    # 2. Некорректный корень (нарушение BST) вызывает ValueError
+    invalid_bst_root = AVLNode(10)
+    invalid_bst_root.left = AVLNode(20)  # левый больше корня!
+    with pytest.raises(ValueError, match='violates AVL invariants'):
+        AVL(invalid_bst_root)
+
+    # 3. Некорректный корень (нарушение баланса) вызывает ValueError
+    unbalanced_root = AVLNode(10)
+    unbalanced_root.left = AVLNode(5)
+    unbalanced_root.left.left = AVLNode(2)
+    unbalanced_root.height = 3
+    unbalanced_root.left.height = 2
+    with pytest.raises(ValueError, match='violates AVL invariants'):
+        AVL(unbalanced_root)
+
+
+def test_delete_rotation_ll() -> None:
+    # Удаление узла 30 оставляет корень 20 с левым ребенком 10 (h=2, BF >= 0)
+    # Вызывается малое правое вращение (LL)
     tree = AVL()
-    for k in [10, 5, 20, 25]:
+    for k in [20, 10, 30, 5]:
         tree.insert(k)
 
-    # При удалении 5 правое поддерево перевешивает, требуется левый поворот
-    tree.delete(5)
+    tree.delete(30)
     assert tree.is_valid_avl()
-    assert tree.inorder() == [10, 20, 25]
+    assert tree.root is not None
+    assert tree.root.key == 10
+    assert tree.root.left is not None and tree.root.left.key == 5
+    assert tree.root.right is not None and tree.root.right.key == 20
+    assert tree.root.height == 2
+
+
+def test_delete_rotation_rr() -> None:
+    # Удаление узла 10 оставляет корень 20 с правым ребенком 30 (h=2, BF <= 0)
+    # Вызывается малое левое вращение (RR)
+    tree = AVL()
+    for k in [20, 10, 30, 40]:
+        tree.insert(k)
+
+    tree.delete(10)
+    assert tree.is_valid_avl()
+    assert tree.root is not None
+    assert tree.root.key == 30
+    assert tree.root.left is not None and tree.root.left.key == 20
+    assert tree.root.right is not None and tree.root.right.key == 40
+    assert tree.root.height == 2
+
+
+def test_delete_rotation_lr() -> None:
+    # Удаление узла 30 оставляет корень 20 с левым ребенком 10, у которого BF < 0 (правый потомок 15)
+    # Вызывается большой правый поворот (LR)
+    tree = AVL()
+    for k in [20, 10, 30, 15]:
+        tree.insert(k)
+
+    tree.delete(30)
+    assert tree.is_valid_avl()
+    assert tree.root is not None
+    assert tree.root.key == 15
+    assert tree.root.left is not None and tree.root.left.key == 10
+    assert tree.root.right is not None and tree.root.right.key == 20
+    assert tree.root.height == 2
+
+
+def test_delete_rotation_rl() -> None:
+    # Удаление узла 10 оставляет корень 20 с правым ребенком 30, у которого BF > 0 (левый потомок 25)
+    # Вызывается большой левый поворот (RL)
+    tree = AVL()
+    for k in [20, 10, 30, 25]:
+        tree.insert(k)
+
+    tree.delete(10)
+    assert tree.is_valid_avl()
+    assert tree.root is not None
+    assert tree.root.key == 25
+    assert tree.root.left is not None and tree.root.left.key == 20
+    assert tree.root.right is not None and tree.root.right.key == 30
+    assert tree.root.height == 2
+
+
+def test_delete_cascading_multiple_rotations() -> None:
+    # Каскадная ребалансировка: удаление одного узла провоцирует цепочку
+    # независимых вращений на разных уровнях дерева по пути к корню
+    tree = AVL()
+    keys = [5, 6, 3, 9, 8, 10, 2, 1, 7, 11, 4, 12]
+    for k in keys:
+        tree.insert(k)
+
+    # Исходный корень 5, высота 5
+    assert tree.root is not None and tree.root.key == 5
+    assert tree.root.height == 5
+
+    # Удаление листа 1 провоцирует:
+    # 1. Левый поворот вокруг узла 2 (уменьшает высоту левого поддерева до 2)
+    # 2. Каскадный левый поворот вокруг корня 5 (делает 8 новым корнем дерева)
+    tree.delete(1)
+
+    assert tree.is_valid_avl()
+    assert tree.root is not None
+    assert tree.root.key == 8
+    assert tree.root.height == 4
+    assert tree.root.left is not None and tree.root.left.key == 5
+    assert tree.root.right is not None and tree.root.right.key == 10
 
 
 # =====================================================================

@@ -22,6 +22,8 @@ class AVL:
 
     def __init__(self, root: AVLNode | None = None) -> None:
         self.root: AVLNode | None = root
+        if root is not None and not self.is_valid_avl():
+            raise ValueError('Provided root node violates AVL invariants')
 
     # =========================================================================
     # Вспомогательные методы работы с высотой и балансом

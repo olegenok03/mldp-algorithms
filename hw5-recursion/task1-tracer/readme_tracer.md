@@ -28,17 +28,19 @@
 - Разбивает входящий текст на строки с помощью `splitlines(keepends=True)`, сохраняя символы окончания строк (`\n`).
 - Добавляет текущий отступ `self.tab` исключительно в начале строки (`self._at_line_start is True`) и пропускает пустые переводы строк `\n`.
 - Отслеживает флаг `self._at_line_start = line.endswith('\n')`, корректно обрабатывая фрагментарный вывод (`end=""`).
+- Предоставляет метод `ensure_newline()`: если предыдущий вывод завершился без переноса строки (`print(..., end="")`), метод принудительно переводит строку перед служебными сообщениями декоратора, исключая их «склеивание» с пользовательским выводом.
 - Через `__getattr__` прозрачно делегирует все остальные методы и атрибуты (`fileno`, `encoding`, `flush`) оригинальному потоку.
 
 ### 2. Декоратор (`@tracer`)
 Управляет жизненным циклом потоков и динамикой отступов:
 - **Универсальность вызова:** поддерживает использование как без параметров `@tracer`, так и с настройкой отступа `@tracer(tab='...')`.
 - **Контекст корневого вызова (`is_root`):** потоки `sys.stdout` и `sys.stderr` подменяются ровно один раз на нулевом уровне вложенности (`not isinstance(sys.stdout, IndentedStream)`) и гарантированно возвращаются в исходное состояние при выходе из корневого вызова.
-- **Прямой ход (спуск):** выводит сообщение о вызове функции с текущим отступом вызывающей стороны, после чего увеличивает отступ: `sys.stdout.tab += tab`.
-- **Тело функции и симметричный откат отступа:**
-  - В блоке `else:` (выполняется только при успешном завершении без исключений) **сначала** откатывает отступ назад (`sys.stdout.tab = sys.stdout.tab[:-len(tab)]`), и **затем** выводит сообщение о завершении: если функция возвращает `None`, печатается компактное `f'"{func.__name__}" terminated.'`, иначе — полное сообщение со значением и типом `f'"{func.__name__}" terminated. Returned value: {res} (of type {type(res)}).'`. Благодаря этому строки вызова (`call`) и завершения (`terminated`) функции находятся **строго на одном и том же уровне отступа**.
-  - В блоке `except:` отступ аналогично сначала откатывается назад, после чего сообщение об ошибке отправляется в `sys.stderr` на уровне вызова упавшей функции, и исключение пробрасывается дальше (`raise`).
-- **Очистка ресурсов:** в блоке `finally:` выполняется гарантированное восстановление оригинальных потоков ОС для корневого вызова (`if is_root:`).
+- **Прямой ход (спуск):** при необходимости завершает открытую строку (`ensure_newline()`), выводит сообщение о вызове функции с текущим отступом вызывающей стороны, сохраняет предыдущие отступы (`prev_out_tab`, `prev_err_tab`) и увеличивает текущие отступы: `sys.stdout.tab += tab`.
+- **Симметричный откат отступа:**
+  - В блоке `else:` (выполняется только при успешном завершении без исключений) **сначала** восстанавливает отступ (`sys.stdout.tab = prev_out_tab`), и **затем** выводит сообщение о завершении: если функция возвращает `None`, печатается компактное `f'"{func.__name__}" terminated.'`, иначе — полное сообщение со значением и типом `f'"{func.__name__}" terminated. Returned value: {res} (of type {type(res)}).'`.
+  - В блоке `except BaseException as e:` отступ аналогично сначала восстанавливается до `prev_out_tab`, после чего сообщение об ошибке отправляется в `sys.stderr` на уровне вызова упавшей функции, и исключение пробрасывается дальше (`raise`). Использование `BaseException` гарантирует откат даже при прерываниях интерпретатора (`KeyboardInterrupt`, `SystemExit`, `GeneratorExit`).
+  - Сохранение `prev_out_tab` вместо вычисления среза `tab[:-len(tab)]` предотвращает баг сброса отступа при `@tracer(tab='')`.
+- **Очистка ресурсов:** в блоке `finally:` выполняется гарантированное восстановление оригинальных системных потоков ОС для корневого вызова (`if is_root:`).
 
 ---
 
@@ -73,6 +75,11 @@ class IndentedStream:
             self._at_line_start = line.endswith('\n')
         self.original_stream.write(''.join(result))
 
+    def ensure_newline(self) -> None:
+        """Принудительно переводит строку, если вывод остановился не в начале строки."""
+        if not self._at_line_start:
+            self.write('\n')
+
     def __getattr__(self, name: str) -> object:
         return getattr(self.original_stream, name)
 
@@ -89,19 +96,30 @@ def tracer(_func=None, *, tab: str = '    ') -> Callable:
                 sys.stdout = IndentedStream(old_stdout, tab='')
                 sys.stderr = IndentedStream(old_stderr, tab='')
 
+            if isinstance(sys.stdout, IndentedStream):
+                sys.stdout.ensure_newline()
+
             print(f'"{func.__name__}" call with args {args} and kwargs {kwargs}.')
+
+            prev_out_tab = sys.stdout.tab
+            prev_err_tab = sys.stderr.tab
             sys.stdout.tab += tab
             sys.stderr.tab += tab
+
             try:
                 res = func(*args, **kwargs)
-            except Exception as e:
-                sys.stdout.tab = sys.stdout.tab[: -len(tab)]
-                sys.stderr.tab = sys.stderr.tab[: -len(tab)]
+            except BaseException as e:
+                sys.stdout.tab = prev_out_tab
+                sys.stderr.tab = prev_err_tab
+                if isinstance(sys.stderr, IndentedStream):
+                    sys.stderr.ensure_newline()
                 sys.stderr.write(f'"{func.__name__}" raised {type(e).__name__}: {e}\n')
                 raise
             else:
-                sys.stdout.tab = sys.stdout.tab[: -len(tab)]
-                sys.stderr.tab = sys.stderr.tab[: -len(tab)]
+                sys.stdout.tab = prev_out_tab
+                sys.stderr.tab = prev_err_tab
+                if isinstance(sys.stdout, IndentedStream):
+                    sys.stdout.ensure_newline()
                 if res is None:
                     print(f'"{func.__name__}" terminated.')
                 else:

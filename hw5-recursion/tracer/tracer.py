@@ -26,6 +26,11 @@ class IndentedStream:
             self._at_line_start = line.endswith('\n')
         self.original_stream.write(''.join(result))
 
+    def ensure_newline(self) -> None:
+        """Принудительно переводит строку, если вывод остановился не в начале строки."""
+        if not self._at_line_start:
+            self.write('\n')
+
     def __getattr__(self, name: str) -> object:
         return getattr(self.original_stream, name)
 
@@ -42,19 +47,30 @@ def tracer(_func=None, *, tab: str = '    ') -> Callable:
                 sys.stdout = IndentedStream(old_stdout, tab='')
                 sys.stderr = IndentedStream(old_stderr, tab='')
 
+            if isinstance(sys.stdout, IndentedStream):
+                sys.stdout.ensure_newline()
+
             print(f'"{func.__name__}" call with args {args} and kwargs {kwargs}.')
+
+            prev_out_tab = sys.stdout.tab
+            prev_err_tab = sys.stderr.tab
             sys.stdout.tab += tab
             sys.stderr.tab += tab
+
             try:
                 res = func(*args, **kwargs)
-            except Exception as e:
-                sys.stdout.tab = sys.stdout.tab[: -len(tab)]
-                sys.stderr.tab = sys.stderr.tab[: -len(tab)]
+            except BaseException as e:
+                sys.stdout.tab = prev_out_tab
+                sys.stderr.tab = prev_err_tab
+                if isinstance(sys.stderr, IndentedStream):
+                    sys.stderr.ensure_newline()
                 sys.stderr.write(f'"{func.__name__}" raised {type(e).__name__}: {e}\n')
                 raise
             else:
-                sys.stdout.tab = sys.stdout.tab[: -len(tab)]
-                sys.stderr.tab = sys.stderr.tab[: -len(tab)]
+                sys.stdout.tab = prev_out_tab
+                sys.stderr.tab = prev_err_tab
+                if isinstance(sys.stdout, IndentedStream):
+                    sys.stdout.ensure_newline()
                 if res is None:
                     print(f'"{func.__name__}" terminated.')
                 else:
